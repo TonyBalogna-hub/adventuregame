@@ -245,49 +245,71 @@ def rest(player):
 def main():
     print("=== Adventure Game ===")
 
+    # ---------------------------
     # Load or New Game
+    # ---------------------------
     print("1. New Game")
     print("2. Load Game")
     start_choice = input("> ")
 
     if start_choice == "2":
-        player = load_game()
+        player = gamefunctions.load_game()
         if player:
             print(f"Welcome back, {player['name']}!")
         else:
             print("No save file found. Starting a new game instead.")
-            player = create_player()
+            player = gamefunctions.create_player()
             player["name"] = input("Enter your name: ")
     else:
-        player = create_player()
+        player = gamefunctions.create_player()
         player["name"] = input("Enter your name: ")
 
+    # ---------------------------
+    # Load map state
+    # ---------------------------
+    map_state = gamefunctions.load_map_state()
 
-    # Main loop
+    # ---------------------------
+    # Main Town Menu Loop
+    # ---------------------------
     while True:
-        print("\n=== Main Menu ===")
-        print("1. Fight a monster")
-        print("2. Rest")
-        print("3. Shop")
-        print("4. Inventory")
-        print("5. Save and Quit")
+        print("\n=== Town Menu ===")
+        print("1. Leave town (Explore Map)")
+        print("2. Fight a monster directly")
+        print("3. Rest")
+        print("4. Shop")
+        print("5. Inventory")
+        print("6. Save and Quit")
 
         choice = input("> ")
 
         if choice == "1":
-            fight_monster(player)
+            # Run the map and get the returned action
+            action, map_state = gamefunctions.run_map(map_state)
+
+            if action == "monster":
+                gamefunctions.fight_monster(player)
+            elif action == "town":
+                print("You returned to town.")
+            elif action == "quit":
+                print("Game exited abruptly.")
+                break
+
         elif choice == "2":
-            rest(player)
+            gamefunctions.fight_monster(player)
         elif choice == "3":
-            shop(player)
+            gamefunctions.rest(player)
         elif choice == "4":
-            show_inventory(player)
+            gamefunctions.shop(player)
         elif choice == "5":
-            save_game(player)
+            gamefunctions.show_inventory(player)
+        elif choice == "6":
+            gamefunctions.save_game(player)
             print("Goodbye!")
             break
         else:
             print("Invalid option.")
+
 
 
 if __name__ == "__main__":

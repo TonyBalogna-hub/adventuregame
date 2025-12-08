@@ -319,3 +319,77 @@ def fight_monster(player):
                     player["equipped_weapon"] = None
             return
 
+import pygame
+import json
+import os
+
+MAP_FILE = "map_state.json"
+
+def load_map_state():
+    if os.path.exists(MAP_FILE):
+        with open(MAP_FILE,"r") as f:
+            return json.load(f)
+    else:
+        return {"player_pos":[0,0],"monster_defeated":False}
+
+def save_map_state(state):
+    with open(MAP_FILE,"w") as f:
+        json.dump(state,f)
+
+def run_map(state):
+    GRID = 10
+    TILE = 32
+    TOWN = (0,0)
+    MONSTER = (5,5)
+
+    pygame.init()
+    screen = pygame.display.set_mode((GRID*TILE, GRID*TILE))
+    clock = pygame.time.Clock()
+    running = True
+
+    px, py = state["player_pos"]
+    monster_defeated = state["monster_defeated"]
+    action = None
+
+    while running:
+        screen.fill((0,0,0))
+
+        # Draw grid
+        for x in range(GRID):
+            for y in range(GRID):
+                pygame.draw.rect(screen,(50,50,50),(x*TILE,y*TILE,TILE,TILE),1)
+
+        # Draw town and monster
+        pygame.draw.circle(screen,(0,255,0),(TOWN[0]*TILE+TILE//2,TOWN[1]*TILE+TILE//2),TILE//2-2)
+        if not monster_defeated:
+            pygame.draw.circle(screen,(255,0,0),(MONSTER[0]*TILE+TILE//2,MONSTER[1]*TILE+TILE//2),TILE//2-2)
+
+        # Draw player
+        pygame.draw.rect(screen,(0,0,255),(px,py,TILE,TILE))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                action = "quit"
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP: py = max(0, py-TILE)
+                elif event.key == pygame.K_DOWN: py = min((GRID-1)*TILE, py+TILE)
+                elif event.key == pygame.K_LEFT: px = max(0, px-TILE)
+                elif event.key == pygame.K_RIGHT: px = min((GRID-1)*TILE, px+TILE)
+                
+                if (px//TILE, py//TILE) == TOWN:
+                    action = "town"
+                    running = False
+                elif not monster_defeated and (px//TILE, py//TILE) == MONSTER:
+                    action = "monster"
+                    running = False
+
+        clock.tick(10)
+
+    pygame.quit()
+    state["player_pos"] = [px//TILE, py//TILE]
+    save_map_state(state)
+    return action, state
+

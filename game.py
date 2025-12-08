@@ -1,13 +1,14 @@
-"""Main game file for the Adventure Game.
+"""
+Main game file for the Adventure Game.
 
-This program runs a simple text-based RPG where the player can fight
-monsters, rest to regain health, or quit the game. It imports functions
-from gamefunctions.py and demonstrates loops, input validation, and
-basic combat logic.
+This version includes saving and loading your game using JSON.
 """
 
 import random
+import json
+import os
 import gamefunctions
+
 
 # ---------------------------------------------------
 # Create player with stats and inventory
@@ -21,6 +22,55 @@ def create_player():
         "inventory": [],
         "equipped_weapon": None
     }
+
+
+# ---------------------------------------------------
+# SAVE GAME
+# ---------------------------------------------------
+def save_game(player, filename="savegame.json"):
+    data = {
+        "name": player["name"],
+        "hp": player["hp"],
+        "gold": player["gold"],
+        "damage": player["damage"],
+        "inventory": player["inventory"],
+        "equipped_weapon": (
+            player["equipped_weapon"]["name"]
+            if player["equipped_weapon"] else None
+        )
+    }
+
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"\nGame saved to {filename}!\n")
+
+
+# ---------------------------------------------------
+# LOAD GAME
+# ---------------------------------------------------
+def load_game(filename="savegame.json"):
+    if not os.path.exists(filename):
+        print("No save file found.")
+        return None
+
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    print("\nSave file loaded!")
+
+    # Fix equipped weapon reference
+    weapon_name = data["equipped_weapon"]
+    data["equipped_weapon"] = None
+
+    if weapon_name:
+        for item in data["inventory"]:
+            if item["name"] == weapon_name:
+                data["equipped_weapon"] = item
+                break
+
+    return data
+
 
 # ---------------------------------------------------
 # Shop functionality
@@ -47,140 +97,198 @@ def shop(player):
             print("You bought a Sword!")
         else:
             print("Not enough gold.")
+
     elif choice == "2":
         if player["gold"] >= 40:
             player["gold"] -= 40
-            item = {"name": "Monster Charm", "type": "special", "effect": "auto_kill"}
+            item = {
+                "name": "Monster Charm",
+                "type": "special",
+                "effect": "auto_kill"
+            }
             player["inventory"].append(item)
             print("You bought a Monster Charm!")
         else:
             print("Not enough gold.")
+
     else:
         print("Leaving shop...")
+
 
 # ---------------------------------------------------
 # Show inventory
 # ---------------------------------------------------
 def show_inventory(player):
     print("\n=== Inventory ===")
+
     if not player["inventory"]:
-        print("Inventory is empty.\n")
+        print("Your inventory is empty.")
         return
-    for item in player["inventory"]:
+
+    for i, item in enumerate(player["inventory"], 1):
         if item["type"] == "weapon":
-            print(f"{item['name']} (Weapon, {item['currentDurability']} durability)")
+            print(f"{i}. {item['name']} (Damage +{item['damage_bonus']}, Durability {item['currentDurability']}/{item['maxDurability']})")
         elif item["type"] == "special":
-            print(f"{item['name']} (Special Item)")
+            print(f"{i}. {item['name']} (Special Item)")
         else:
-            print(f"{item['name']} ({item['type']})")
-    print()
+            print(f"{i}. {item['name']}")
+
+    print("\nE. Equip a weapon")
+    print("X. Exit inventory")
+
+    choice = input("Choose an option: ")
+
+    if choice.lower() == "e":
+        equip_weapon(player)
+    else:
+        print("Closing inventory...")
+
 
 # ---------------------------------------------------
-# Equip weapon
+# Equip a weapon
 # ---------------------------------------------------
 def equip_weapon(player):
-    weapons = [i for i in player["inventory"] if i["type"] == "weapon"]
-    if not weapons:
-        print("\nYou have no weapons to equip.\n")
-        return
     print("\n=== Equip Weapon ===")
-    for i, w in enumerate(weapons, start=1):
-        print(f"{i}. {w['name']} ({w['currentDurability']} durability)")
-    choice = input("Choose weapon number: ")
-    if not choice.isdigit():
-        print("Invalid input.")
+
+    weapons = [item for item in player["inventory"] if item["type"] == "weapon"]
+
+    if not weapons:
+        print("No weapons in inventory.")
         return
-    idx = int(choice) - 1
-    if 0 <= idx < len(weapons):
-        player["equipped_weapon"] = weapons[idx]
-        print(f"You equipped the {weapons[idx]['name']}!")
-    else:
-        print("Invalid selection.")
+
+    for i, weapon in enumerate(weapons, 1):
+        print(f"{i}. {weapon['name']} (+{weapon['damage_bonus']} dmg)")
+
+    try:
+        idx = int(input("Choose weapon number: "))
+        if 1 <= idx <= len(weapons):
+            player["equipped_weapon"] = weapons[idx - 1]
+            print(f"You equipped {weapons[idx - 1]['name']}!")
+        else:
+            print("Invalid choice.")
+    except ValueError:
+        print("Invalid input.")
+
 
 # ---------------------------------------------------
 # Fight monster
 # ---------------------------------------------------
 def fight_monster(player):
-    print("\nA monster attacks!")
-    # Check for Monster Charm
-    for item in player["inventory"]:
-        if item["type"] == "special" and item["effect"] == "auto_kill":
-            use = input("Use Monster Charm for instant kill? (y/n): ")
-            if use.lower() == "y":
-                print("You used the Monster Charm! Monster destroyed instantly!")
+    monster = gamefunctions.random_monster()
+    mhp = monster["hp"]
+    mdmg = monster["damage"]
+
+    print(f"\nA {monster['name']} appears!")
+    print(f"HP: {mhp} | Damage: {mdmg}")
+
+    while mhp > 0 and player["hp"] > 0:
+        print(f"\nYour HP: {player['hp']}")
+        action = input("(A)ttack, (R)un: ").lower()
+
+        if action == "r":
+            print("You ran away!")
+            return
+
+        # Check auto-kill item
+        for item in player["inventory"]:
+            if item["type"] == "special" and item["effect"] == "auto_kill":
+                print("Your Monster Charm activates! The monster dies instantly!")
                 player["inventory"].remove(item)
-                return
+                mhp = 0
+                break
 
-    # Normal fight
-    monster_hp = random.randint(10, 20)
-    print(f"Monster HP: {monster_hp}")
-    weapon = player["equipped_weapon"]
-    dmg = player["damage"] + (weapon["damage_bonus"] if weapon else 0)
+        if mhp <= 0:
+            break
 
-    while monster_hp > 0:
-        monster_hp -= dmg
-        print(f"You hit for {dmg}!")
-        if monster_hp <= 0:
-            print("Monster defeated!")
-            if weapon:
-                weapon["currentDurability"] -= 1
-                print(f"{weapon['name']} durability is now {weapon['currentDurability']}")
-                if weapon["currentDurability"] <= 0:
-                    print("Your weapon breaks!")
-                    player["inventory"].remove(weapon)
-                    player["equipped_weapon"] = None
-            gold_reward = random.randint(5, 15)
-            player["gold"] += gold_reward
-            print(f"You earned {gold_reward} gold.")
-            return
-        # Monster hits back
-        monster_attack = random.randint(3, 8)
-        player["hp"] -= monster_attack
-        print(f"Monster hits you for {monster_attack} damage!")
-        if player["hp"] <= 0:
-            print("You were defeated and wake up back in town...")
-            player["hp"] = 30
-            return
+        # Player attack
+        dmg = player["damage"]
+        if player["equipped_weapon"]:
+            dmg += player["equipped_weapon"]["damage_bonus"]
+            player["equipped_weapon"]["currentDurability"] -= 1
+
+            # Weapon breaks
+            if player["equipped_weapon"]["currentDurability"] <= 0:
+                print(f"Your {player['equipped_weapon']['name']} broke!")
+                player["inventory"].remove(player["equipped_weapon"])
+                player["equipped_weapon"] = None
+
+        mhp -= dmg
+        print(f"You hit the {monster['name']} for {dmg} damage!")
+
+        if mhp <= 0:
+            break
+
+        # Monster attacks back
+        player["hp"] -= mdmg
+        print(f"The monster hits you for {mdmg} damage!")
+
+    if player["hp"] <= 0:
+        print("\nYou died!")
+        exit()
+
+    gold_gain = random.randint(5, 20)
+    player["gold"] += gold_gain
+    print(f"\nYou defeated the monster and earned {gold_gain} gold!")
+
 
 # ---------------------------------------------------
-# Main loop
+# Rest
+# ---------------------------------------------------
+def rest(player):
+    print("You take a rest... +10 HP")
+    player["hp"] += 10
+
+
+# ---------------------------------------------------
+# Main game loop
 # ---------------------------------------------------
 def main():
-    player = create_player()
-    player["name"] = input("Enter your name, adventurer: ")
-    gamefunctions.print_greeting(player["name"])
-    print("\nWelcome to the town!")
+    print("=== Adventure Game ===")
 
+    # Load or New Game
+    print("1. New Game")
+    print("2. Load Game")
+    start_choice = input("> ")
+
+    if start_choice == "2":
+        player = load_game()
+        if player:
+            print(f"Welcome back, {player['name']}!")
+        else:
+            print("No save file found. Starting a new game instead.")
+            player = create_player()
+            player["name"] = input("Enter your name: ")
+    else:
+        player = create_player()
+        player["name"] = input("Enter your name: ")
+
+
+    # Main loop
     while True:
-        print(f"\nHP: {player['hp']} | Gold: {player['gold']}")
-        print("1. Go to Shop")
-        print("2. Show Inventory")
-        print("3. Equip Weapon")
-        print("4. Fight Monster")
-        print("5. Sleep (Restore HP for 5 Gold)")
-        print("6. Quit")
+        print("\n=== Main Menu ===")
+        print("1. Fight a monster")
+        print("2. Rest")
+        print("3. Shop")
+        print("4. Inventory")
+        print("5. Save and Quit")
 
-        choice = input("Choose an action: ")
+        choice = input("> ")
+
         if choice == "1":
-            shop(player)
-        elif choice == "2":
-            show_inventory(player)
-        elif choice == "3":
-            equip_weapon(player)
-        elif choice == "4":
             fight_monster(player)
+        elif choice == "2":
+            rest(player)
+        elif choice == "3":
+            shop(player)
+        elif choice == "4":
+            show_inventory(player)
         elif choice == "5":
-            if player["gold"] >= 5:
-                player["gold"] -= 5
-                player["hp"] = 30
-                print("You rested and restored your health.")
-            else:
-                print("Not enough gold to rest.")
-        elif choice == "6":
-            gamefunctions.print_farewell(player["name"], player["gold"])
+            save_game(player)
+            print("Goodbye!")
             break
         else:
-            print("Invalid choice. Please select 1-6.")
+            print("Invalid option.")
+
 
 if __name__ == "__main__":
     main()

@@ -318,3 +318,4 @@ def fight_monster(player):
                     player["inventory"].remove(weapon)
                     player["equipped_weapon"] = None
             return
+
